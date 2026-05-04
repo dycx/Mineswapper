@@ -73,4 +73,28 @@ struct Grid: Equatable, Sendable {
             }
         }
     }
+
+    @discardableResult
+    mutating func reveal(row: Int, column: Int) -> [(Int, Int)] {
+        guard isValidPosition(row: row, column: column) else { return [] }
+        guard !cells[row][column].isRevealed else { return [] }
+        guard !cells[row][column].isFlagged else { return [] }
+
+        cells[row][column].isRevealed = true
+        var revealed = [(row, column)]
+
+        if cells[row][column].isMine {
+            return revealed
+        }
+
+        if cells[row][column].adjacentMines == 0 {
+            for (nr, nc) in neighbors(row: row, column: column) {
+                if !cells[nr][nc].isRevealed && !cells[nr][nc].isFlagged {
+                    revealed.append(contentsOf: reveal(row: nr, column: nc))
+                }
+            }
+        }
+
+        return revealed
+    }
 }
