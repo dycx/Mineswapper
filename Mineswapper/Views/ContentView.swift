@@ -24,5 +24,18 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: boardWidth + 32, height: boardHeight + 100)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                DifficultyPickerView(difficulty: Binding(
+                    get: { game.difficulty },
+                    set: { game.changeDifficulty($0) }
+                ))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Game") {
+                    game.newGame()
+                }
+            }
+        }
     }
 }
