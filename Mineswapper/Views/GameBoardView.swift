@@ -25,30 +25,32 @@ struct GameBoardView: View {
 
     @ViewBuilder
     private func cellView(row: Int, col: Int) -> some View {
-        CellView(
-            cell: game.grid.cell(at: row, col)!,
-            isExploded: game.explodedRow == row && game.explodedColumn == col,
-            size: Constants.cellSize
-        )
-        .onTapGesture {
-            handleLeftClick(row: row, col: col)
-        }
-        .contextMenu {
-            Button("Flag") {
-                game.toggleFlag(row: row, column: col)
+        if let cell = game.grid.cell(at: row, col) {
+            CellView(
+                cell: cell,
+                isExploded: game.explodedRow == row && game.explodedColumn == col,
+                size: Constants.cellSize
+            )
+            .onTapGesture {
+                handleLeftClick(row: row, col: col)
             }
-        }
-        .simultaneousGesture(
-            TapGesture()
-                .modifiers(.control)
-                .onEnded { _ in
+            .contextMenu {
+                Button("Flag") {
                     game.toggleFlag(row: row, column: col)
                 }
-        )
+            }
+            .simultaneousGesture(
+                TapGesture()
+                    .modifiers(.control)
+                    .onEnded { _ in
+                        game.toggleFlag(row: row, column: col)
+                    }
+            )
+        }
     }
 
     private func handleLeftClick(row: Int, col: Int) {
-        let cell = game.grid.cell(at: row, col)!
+        guard let cell = game.grid.cell(at: row, col) else { return }
         if cell.isRevealed && cell.adjacentMines > 0 {
             game.chordReveal(row: row, column: col)
         } else {
