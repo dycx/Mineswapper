@@ -57,7 +57,7 @@ final class PersistenceService {
         else {
             return nil
         }
-        return .custom(rows: rows, columns: columns, mines: mines)
+        return .custom(rows: rows, columns: columns, mines: mines).clamped()
     }
 
     // MARK: - Cleanup
