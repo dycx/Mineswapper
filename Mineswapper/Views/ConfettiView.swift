@@ -3,14 +3,14 @@ import SwiftUI
 struct ConfettiView: View {
     let isActive: Bool
     @State private var particles: [Particle] = []
-    @State private var animationTimer: Timer?
+    @State private var spawnTask: Task<Void, Never>?
 
     private struct Particle: Identifiable {
         let id = UUID()
         let color: Color
-        let startX: CGFloat
-        let size: CGFloat
-        var yOffset: CGFloat = 0
+        let startX: Double
+        let size: Double
+        var endY: Double = 0
         var opacity: Double = 1
         var rotation: Double = 0
     }
@@ -26,14 +26,12 @@ struct ConfettiView: View {
                     Circle()
                         .fill(particle.color)
                         .frame(width: particle.size, height: particle.size)
-                        .position(
-                            x: particle.startX,
-                            y: geo.size.height + particle.yOffset
-                        )
+                        .position(x: particle.startX, y: particle.endY)
                         .opacity(particle.opacity)
                         .rotationEffect(.degrees(particle.rotation))
                 }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .allowsHitTesting(false)
         .onChange(of: isActive) { _, newValue in
@@ -47,48 +45,54 @@ struct ConfettiView: View {
 
     private func startConfetti() {
         particles = []
-        animationTimer?.invalidate()
+        spawnTask?.cancel()
 
-        let startTime = Date()
+        spawnTask = Task { @MainActor in
+            // Spawn particles in batches
+            for _ in 0..<12 {
+                guard !Task.isCancelled else { return }
+                spawnBatch()
+                try? await Task.sleep(for: .milliseconds(120))
+            }
+        }
 
-        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
-            let elapsed = Date().timeIntervalSince(startTime)
-
-            if elapsed > 2.5 {
-                timer.invalidate()
+        // Auto-cleanup after animation completes
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(2800))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
                 particles = []
-                return
             }
+        }
+    }
 
-            // Add new particles
-            if elapsed < 1.5 {
-                for _ in 0..<3 {
-                    let particle = Particle(
-                        color: Self.colors.randomElement()!,
-                        startX: CGFloat.random(in: 20...380),
-                        size: CGFloat.random(in: 4...10)
-                    )
-                    particles.append(particle)
-                }
-            }
+    private func spawnBatch() {
+        let newParticles = (0..<5).map { _ in
+            Particle(
+                color: Self.colors.randomElement()!,
+                startX: Double.random(in: 20...380),
+                size: Double.random(in: 4...10),
+                endY: Double.random(in: -50...20),
+                rotation: Double.random(in: 0...360)
+            )
+        }
+        particles.append(contentsOf: newParticles)
 
-            // Animate existing particles
+        // Animate each batch falling and fading
+        withAnimation(.easeIn(duration: 2.0)) {
             for i in particles.indices {
-                withAnimation(.linear(duration: 0.03)) {
-                    particles[i].yOffset -= CGFloat.random(in: 3...8)
-                    particles[i].opacity -= 0.008
-                    particles[i].rotation += Double.random(in: 2...8)
-                }
+                particles[i].endY += Double.random(in: 400...600)
+                particles[i].opacity = 0
+                particles[i].rotation += Double.random(in: 180...720)
             }
-
-            // Remove dead particles
-            particles.removeAll { $0.opacity <= 0 }
         }
     }
 
     private func stopConfetti() {
-        animationTimer?.invalidate()
-        animationTimer = nil
-        particles = []
+        spawnTask?.cancel()
+        spawnTask = nil
+        withAnimation(.easeOut(duration: 0.2)) {
+            particles = []
+        }
     }
 }

@@ -22,6 +22,10 @@ struct DifficultyPickerView: View {
         }
     }
 
+    private var maxMines: Int {
+        max(1, Int(customRows * customColumns) - Difficulty.minSafeCells)
+    }
+
     private var customDifficultySheet: some View {
         VStack(spacing: 20) {
             Text("Custom Difficulty")
@@ -46,8 +50,6 @@ struct DifficultyPickerView: View {
                     }
                 }
 
-                let maxMines = max(1, Int(customRows * customColumns) - 9)
-
                 LabeledContent("Mines") {
                     HStack {
                         Slider(value: $customMines, in: 1...Double(maxMines), step: 1)
@@ -58,17 +60,20 @@ struct DifficultyPickerView: View {
                 }
             }
             .frame(width: 300)
+            .onChange(of: customRows) { _, _ in clampMines() }
+            .onChange(of: customColumns) { _, _ in clampMines() }
 
             HStack {
                 Button("Cancel") { showCustomSheet = false }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Start") {
-                    difficulty = .custom(
+                    let custom = Difficulty.custom(
                         rows: Int(customRows),
                         columns: Int(customColumns),
                         mines: Int(customMines)
                     )
+                    difficulty = custom.clamped()
                     showCustomSheet = false
                 }
                 .keyboardShortcut(.defaultAction)
@@ -76,5 +81,13 @@ struct DifficultyPickerView: View {
         }
         .padding(20)
         .frame(width: 340)
+    }
+
+    /// Clamp mine count when grid dimensions change.
+    private func clampMines() {
+        let maxVal = Double(maxMines)
+        if customMines > maxVal {
+            customMines = maxVal
+        }
     }
 }

@@ -5,6 +5,8 @@ struct Grid: Equatable, Sendable {
     let columns: Int
     let mineCount: Int
     private(set) var cells: [[Cell]]
+    /// Actual number of mines placed (may be less than mineCount on small grids).
+    private(set) var actualMineCount: Int = 0
 
     init(rows: Int, columns: Int, mineCount: Int) {
         self.rows = rows
@@ -16,9 +18,26 @@ struct Grid: Equatable, Sendable {
         )
     }
 
+    // MARK: - Safe Access
+
+    /// Optional access — returns nil for out-of-bounds positions.
     func cell(at row: Int, _ column: Int) -> Cell? {
         guard isValidPosition(row: row, column: column) else { return nil }
         return cells[row][column]
+    }
+
+    /// Non-optional subscript for known-valid positions. Traps in debug if out-of-bounds.
+    subscript(row row: Int, column column: Int) -> Cell {
+        get {
+            precondition(isValidPosition(row: row, column: column),
+                         "Grid subscript out of bounds: (\(row), \(column)) in \(rows)x\(columns) grid")
+            return cells[row][column]
+        }
+        set {
+            precondition(isValidPosition(row: row, column: column),
+                         "Grid subscript out of bounds: (\(row), \(column)) in \(rows)x\(columns) grid")
+            cells[row][column] = newValue
+        }
     }
 
     mutating func setCell(at row: Int, _ column: Int, cell: Cell) {
@@ -45,6 +64,8 @@ struct Grid: Equatable, Sendable {
         return result
     }
 
+    // MARK: - Mine Placement
+
     mutating func placeMines(excludingRow safeRow: Int, column safeCol: Int) {
         var positions: [(Int, Int)] = []
         for r in 0..<rows {
@@ -60,6 +81,7 @@ struct Grid: Equatable, Sendable {
         for (r, c) in minePositions {
             cells[r][c].isMine = true
         }
+        actualMineCount = minePositions.count
     }
 
     mutating func calculateAdjacentMines() {
@@ -74,6 +96,8 @@ struct Grid: Equatable, Sendable {
         }
     }
 
+    // MARK: - Reveal (iterative flood-fill)
+
     @discardableResult
     mutating func reveal(row: Int, column: Int) -> [(Int, Int)] {
         guard isValidPosition(row: row, column: column) else { return [] }
@@ -87,10 +111,15 @@ struct Grid: Equatable, Sendable {
             return revealed
         }
 
+        // Iterative flood-fill using a queue (avoids stack overflow on large grids)
         if cells[row][column].adjacentMines == 0 {
-            for (nr, nc) in neighbors(row: row, column: column) {
-                if !cells[nr][nc].isRevealed && !cells[nr][nc].isFlagged {
-                    revealed.append(contentsOf: reveal(row: nr, column: nc))
+            var queue = neighbors(row: row, column: column)
+            while let (nr, nc) = queue.popLast() {
+                guard !cells[nr][nc].isRevealed, !cells[nr][nc].isFlagged else { continue }
+                cells[nr][nc].isRevealed = true
+                revealed.append((nr, nc))
+                if cells[nr][nc].adjacentMines == 0 {
+                    queue.append(contentsOf: neighbors(row: nr, column: nc))
                 }
             }
         }

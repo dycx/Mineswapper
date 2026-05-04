@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 
 @Observable
 final class MinesweeperGame {
@@ -13,6 +12,12 @@ final class MinesweeperGame {
 
     private var timer: Timer?
     private var isFirstClick = true
+    private var flagCount = 0
+    private var revealedSafeCount = 0
+
+    private var totalSafeCells: Int {
+        grid.rows * grid.columns - grid.actualMineCount
+    }
 
     init(difficulty: Difficulty) {
         self.difficulty = difficulty
@@ -24,10 +29,13 @@ final class MinesweeperGame {
         self.remainingMines = difficulty.mineCount
     }
 
+    // MARK: - Game Actions
+
     func reveal(row: Int, column: Int) {
         guard state == .idle || state == .playing else { return }
-        guard !grid.cell(at: row, column)!.isFlagged else { return }
-        guard !grid.cell(at: row, column)!.isRevealed else { return }
+        let cell = grid[row: row, column: column]
+        guard !cell.isFlagged else { return }
+        guard !cell.isRevealed else { return }
 
         if isFirstClick {
             grid.placeMines(excludingRow: row, column: column)
@@ -37,9 +45,9 @@ final class MinesweeperGame {
             startTimer()
         }
 
-        grid.reveal(row: row, column: column)
+        let revealedPositions = grid.reveal(row: row, column: column)
 
-        if grid.cell(at: row, column)!.isMine {
+        if grid[row: row, column: column].isMine {
             state = .lost
             explodedRow = row
             explodedColumn = column
@@ -48,31 +56,39 @@ final class MinesweeperGame {
             return
         }
 
+        // Track revealed safe cells incrementally
+        revealedSafeCount += revealedPositions.filter { (r, c) in
+            !grid[row: r, column: c].isMine
+        }.count
         checkWin()
     }
 
     func toggleFlag(row: Int, column: Int) {
         guard state == .idle || state == .playing else { return }
-        guard !grid.cell(at: row, column)!.isRevealed else { return }
+        let cell = grid[row: row, column: column]
+        guard !cell.isRevealed else { return }
 
-        var cell = grid.cell(at: row, column)!
-        cell.isFlagged.toggle()
-        grid.setCell(at: row, column, cell: cell)
-        remainingMines = difficulty.mineCount - flagCount()
+        grid[row: row, column: column].isFlagged.toggle()
+        if grid[row: row, column: column].isFlagged {
+            flagCount += 1
+        } else {
+            flagCount -= 1
+        }
+        remainingMines = difficulty.mineCount - flagCount
     }
 
     func chordReveal(row: Int, column: Int) {
         guard state == .playing else { return }
-        let cell = grid.cell(at: row, column)!
+        let cell = grid[row: row, column: column]
         guard cell.isRevealed, cell.adjacentMines > 0 else { return }
 
-        let neighbors = grid.neighbors(row: row, column: column)
-        let flaggedCount = neighbors.filter { grid.cell(at: $0.0, $0.1)!.isFlagged }.count
+        let neighborPositions = grid.neighbors(row: row, column: column)
+        let flaggedCount = neighborPositions.filter { grid[row: $0.0, column: $0.1].isFlagged }.count
 
         guard flaggedCount == cell.adjacentMines else { return }
 
-        for (nr, nc) in neighbors {
-            if !grid.cell(at: nr, nc)!.isFlagged && !grid.cell(at: nr, nc)!.isRevealed {
+        for (nr, nc) in neighborPositions {
+            if !grid[row: nr, column: nc].isFlagged && !grid[row: nr, column: nc].isRevealed {
                 reveal(row: nr, column: nc)
             }
         }
@@ -89,6 +105,8 @@ final class MinesweeperGame {
         remainingMines = difficulty.mineCount
         elapsedTime = 0
         isFirstClick = true
+        flagCount = 0
+        revealedSafeCount = 0
         explodedRow = nil
         explodedColumn = nil
     }
@@ -98,43 +116,28 @@ final class MinesweeperGame {
         newGame()
     }
 
-    // MARK: - Private
+    // MARK: - Computed
 
-    private func flagCount() -> Int {
-        var count = 0
-        for r in 0..<grid.rows {
-            for c in 0..<grid.columns {
-                if grid.cell(at: r, c)!.isFlagged { count += 1 }
-            }
-        }
-        return count
+    var formattedTime: String {
+        let minutes = elapsedTime / 60
+        let seconds = elapsedTime % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
+
+    // MARK: - Private
 
     private func revealAllMines() {
         for r in 0..<grid.rows {
             for c in 0..<grid.columns {
-                if grid.cell(at: r, c)!.isMine {
-                    var cell = grid.cell(at: r, c)!
-                    cell.isRevealed = true
-                    grid.setCell(at: r, c, cell: cell)
+                if grid[row: r, column: c].isMine {
+                    grid[row: r, column: c].isRevealed = true
                 }
             }
         }
     }
 
     private func checkWin() {
-        var allRevealed = true
-        for r in 0..<grid.rows {
-            for c in 0..<grid.columns {
-                let cell = grid.cell(at: r, c)!
-                if !cell.isMine && !cell.isRevealed {
-                    allRevealed = false
-                    break
-                }
-            }
-            if !allRevealed { break }
-        }
-        if allRevealed {
+        if revealedSafeCount == totalSafeCells {
             state = .won
             stopTimer()
         }
@@ -149,11 +152,5 @@ final class MinesweeperGame {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
-    }
-
-    var formattedTime: String {
-        let minutes = elapsedTime / 60
-        let seconds = elapsedTime % 60
-        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
