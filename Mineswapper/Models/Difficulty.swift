@@ -1,6 +1,6 @@
 import Foundation
 
-enum Difficulty: Equatable, Hashable, Sendable {
+enum Difficulty: Equatable, Hashable, Sendable, Codable {
     case beginner
     case intermediate
     case expert
